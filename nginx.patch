@@ -1,11 +1,12 @@
-Only in ../nginx/src//core: .svn
-Only in ../nginx/src//event/modules: .svn
-Only in ../nginx/src//event: .svn
-Only in ../nginx/src//http/modules/perl: .svn
-Only in ../nginx/src//http/modules: .svn
-diff -cr src//http/ngx_http_upstream.c ../nginx/src//http/ngx_http_upstream.c
-*** src//http/ngx_http_upstream.c	2010-12-10 11:09:43.424567000 +0500
---- ../nginx/src//http/ngx_http_upstream.c	2010-12-07 15:44:09.506474001 +0500
+Only in ../nginx/src/core: .svn
+Only in ../nginx/src/event/modules: .svn
+Only in ../nginx/src/event: .svn
+Only in ../nginx/src/http/modules/perl: .svn
+Only in ../nginx/src/http/modules: .svn
+Only in ../nginx/src/http/modules: ustats
+diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
+*** src/http/ngx_http_upstream.c	2010-12-10 13:23:45.424567000 +0500
+--- ../nginx/src/http/ngx_http_upstream.c	2010-12-07 15:44:09.506474001 +0500
 ***************
 *** 1106,1111 ****
 --- 1106,1116 ----
@@ -102,9 +103,9 @@ diff -cr src//http/ngx_http_upstream.c ../nginx/src//http/ngx_http_upstream.c
       if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
           if (u.err) {
               ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-diff -cr src//http/ngx_http_upstream.h ../nginx/src//http/ngx_http_upstream.h
-*** src//http/ngx_http_upstream.h	2010-12-10 11:09:43.424567000 +0500
---- ../nginx/src//http/ngx_http_upstream.h	2010-12-07 15:44:09.506474001 +0500
+diff -cr src/http/ngx_http_upstream.h ../nginx/src/http/ngx_http_upstream.h
+*** src/http/ngx_http_upstream.h	2010-12-10 13:23:45.424567000 +0500
+--- ../nginx/src/http/ngx_http_upstream.h	2010-12-07 15:44:09.506474001 +0500
 ***************
 *** 89,94 ****
 --- 89,98 ----
@@ -118,9 +119,9 @@ diff -cr src//http/ngx_http_upstream.h ../nginx/src//http/ngx_http_upstream.h
   } ngx_http_upstream_server_t;
   
   
-diff -cr src//http/ngx_http_upstream_round_robin.c ../nginx/src//http/ngx_http_upstream_round_robin.c
-*** src//http/ngx_http_upstream_round_robin.c	2010-12-10 11:09:43.424567000 +0500
---- ../nginx/src//http/ngx_http_upstream_round_robin.c	2010-12-07 15:44:09.506474001 +0500
+diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_upstream_round_robin.c
+*** src/http/ngx_http_upstream_round_robin.c	2010-12-10 13:23:45.424567000 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.c	2010-12-07 15:44:09.506474001 +0500
 ***************
 *** 9,16 ****
   #include <ngx_http.h>
@@ -209,9 +210,9 @@ diff -cr src//http/ngx_http_upstream_round_robin.c ../nginx/src//http/ngx_http_u
   static ngx_int_t
   ngx_http_upstream_cmp_servers(const void *one, const void *two)
   {
-diff -cr src//http/ngx_http_upstream_round_robin.h ../nginx/src//http/ngx_http_upstream_round_robin.h
-*** src//http/ngx_http_upstream_round_robin.h	2010-12-10 11:09:43.424567000 +0500
---- ../nginx/src//http/ngx_http_upstream_round_robin.h	2010-12-07 15:44:09.506474001 +0500
+diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_upstream_round_robin.h
+*** src/http/ngx_http_upstream_round_robin.h	2010-12-10 13:23:45.424567000 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.h	2010-12-07 15:44:09.506474001 +0500
 ***************
 *** 32,37 ****
 --- 32,49 ----
@@ -233,9 +234,9 @@ diff -cr src//http/ngx_http_upstream_round_robin.h ../nginx/src//http/ngx_http_u
   } ngx_http_upstream_rr_peer_t;
   
   
-Only in ../nginx/src//http: .svn
-Only in ../nginx/src//mail: .svn
-Only in ../nginx/src//misc: .svn
-Only in ../nginx/src//os: .svn
-Only in ../nginx/src//os/unix: .svn
-Only in ../nginx/src/: .svn
+Only in ../nginx/src/http: .svn
+Only in ../nginx/src/mail: .svn
+Only in ../nginx/src/misc: .svn
+Only in ../nginx/src/os: .svn
+Only in ../nginx/src/os/unix: .svn
+Only in ../nginx/src: .svn
