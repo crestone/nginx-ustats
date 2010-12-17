@@ -6,7 +6,7 @@ Only in ../nginx/src/http/modules: .svn
 Only in ../nginx/src/http/modules: ustats
 diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
 *** src/http/ngx_http_upstream.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream.c	2010-12-07 15:44:09.506474001 +0500
+--- ../nginx/src/http/ngx_http_upstream.c	2010-12-16 17:10:37.654567000 +0500
 ***************
 *** 1106,1111 ****
 --- 1106,1116 ----
@@ -121,7 +121,7 @@ diff -cr src/http/ngx_http_upstream.h ../nginx/src/http/ngx_http_upstream.h
   
 diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_upstream_round_robin.c
 *** src/http/ngx_http_upstream_round_robin.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.c	2010-12-07 15:44:09.506474001 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.c	2010-12-16 17:01:13.984567000 +0500
 ***************
 *** 9,16 ****
   #include <ngx_http.h>
@@ -212,7 +212,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   {
 diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_upstream_round_robin.h
 *** src/http/ngx_http_upstream_round_robin.h	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.h	2010-12-07 15:44:09.506474001 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.h	2010-12-16 09:25:09.994567000 +0500
 ***************
 *** 32,37 ****
 --- 32,49 ----
@@ -221,7 +221,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_ups
   #endif
 +  
 + #if (NGX_HAVE_USTATS_MODULE)
-+     /* points to the server from which configuration this peer was created */
++     /* points to the server whose configuration was used for this peer */
 +     ngx_http_upstream_server_t      *server;
 +     ngx_uint_t                      num_reqs;
 +     ngx_uint_t                      num_http_499;

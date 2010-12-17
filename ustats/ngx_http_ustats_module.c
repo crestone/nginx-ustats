@@ -61,6 +61,11 @@ const char RESPONSE_HEAD[] =
                "    cursor: pointer;"
                "}"
 
+			   ".stcImplicitUpstream"
+			   "{"
+			   "	background-color: 23C3D5;"
+			   "}"
+
                "/* Firefox seems to not like td:hover */"
                ".stcPeerHover"
                "{"
@@ -71,35 +76,35 @@ const char RESPONSE_HEAD[] =
             "</style>"
 
             "<script type=\"text/javascript\">"
+				"function getReqObj()"
+				"{"
+				"   var xmlhttp;"
+				"   try "
+				"   {"
+				"       xmlhttp = new ActiveXObject('Msxml2.XMLHTTP');"
+				"   }"
+				"   catch (e)"
+				"   {"
+				"       try "
+				"       {"
+				"           xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');"
+				"       }"
+				"       catch (_e)"
+				"       {"
+				"           xmlhttp = false;"
+				"       }"
+				"   }"
+				"   if (!xmlhttp && typeof XMLHttpRequest != 'undefined') "
+				"   {"
+				"       xmlhttp = new XMLHttpRequest();"
+				"   }"
+				"   return xmlhttp;"
+				"}"
+
                 "window.onload = function()"
                 "{"
-                "   setTimeout('window.location.reload()', '%d');"
+				"	setTimeout('window.location.reload()', '%d');"
                 "};"
-
-                "function getReqObj()"
-                "{"
-                "   var xmlhttp;"
-                "   try "
-                "   {"
-                "       xmlhttp = new ActiveXObject('Msxml2.XMLHTTP');"
-                "   }"
-                "   catch (e)"
-                "   {"
-                "       try "
-                "       {"
-                "           xmlhttp = new ActiveXObject('Microsoft.XMLHTTP');"
-                "       }"
-                "       catch (_e)"
-                "       {"
-                "           xmlhttp = false;"
-                "       }"
-                "   }"
-                "   if (!xmlhttp && typeof XMLHttpRequest != 'undefined') "
-                "   {"
-                "       xmlhttp = new XMLHttpRequest();"
-                "   }"
-                "   return xmlhttp;"
-                "}"
 
                 "function onPeerCellClick(obj)"
                 "{"
@@ -117,7 +122,7 @@ const char RESPONSE_HEAD[] =
                 "   var req = getReqObj();"
                 "   req.open('GET', 'ustats?u=' + obj.id + "
                 "                   '&b=' + str + "
-                "                   '&t=' + type, false);"
+                "                   '&t=' + type, true);"
                 "   req.send(null);"
                 "   if (req.status != 200)"
                 "       alert('Some evil has happened. Status code: ' + req.status);"
@@ -625,17 +630,19 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
     for (i = 0; i < conf->upstreams.nelts; ++i)
     {
         ngx_http_upstream_srv_conf_t *uscf = ((ngx_http_upstream_srv_conf_t**)conf->upstreams.elts)[i];
+        ngx_http_upstream_rr_peers_t *peers = uscf->peer.data;
 
         // upstream cell with rowspan variable parameter
         size += sizeof("<tr><th class=\"stcCommon stcHeader\" rowspan=\"\"></th>") +
                 sizeof(ngx_uint_t);
+        if (peers->number && !peers->peer[0].server)
+        	size += sizeof(" stcImplicitUpstream");
 
         // upstream name
         size += (uscf->host.len + 1 /* '\0' is not included in host.len */) * sizeof(u_char);
 
         // Peers
 
-        ngx_http_upstream_rr_peers_t *peers = uscf->peer.data;
         for (k = 0; k < peers->number; ++k)
         {
             size += sizeof(
@@ -675,8 +682,8 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
             // backend numeric parameters
             size += sizeof(ngx_uint_t) * 10;
 
-            // failed access time string                   "-"         date time string
-            size += (peers->peer[k].accessed == 0) ? sizeof(u_char) : sizeof(u_char) * 24;
+            // failed access time string                   "-\0"         date time string
+            size += (peers->peer[k].accessed == 0) ? (sizeof(u_char) * 2) : (sizeof(u_char) * 24);
 
             // blacklisted?
             if (peers->peer[k].fails >= peers->peer[k].max_fails)
@@ -686,12 +693,15 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
             if (peers->peer[k].down)
                 size += sizeof(" stcDisabled") * 12; // each cell in row
 
-            // write <peer_name> (server_conf_name) if there is more than one peer per backend
-            if (peers->peer[k].server->naddrs > 1)
+
+            // write <peer_name> (server_conf_name || upstream_name) if there is more than one peer per backend
+            if (!peers->peer[k].server || peers->peer[k].server->naddrs > 1)
             {
                 size += (peers->peer[k].name.len + 1) * sizeof(u_char) +
-                        sizeof("<br/>()") +
-                        (peers->peer[k].server->name.len + 1) * sizeof(u_char);
+                        sizeof("<br/>()");
+                size += (!peers->peer[k].server)
+							? (uscf->host.len + 1) * sizeof(u_char) // for implicit backends
+							: (peers->peer[k].server->name.len + 1) * sizeof(u_char); // for the rest
             }
             // one server <-> one peer - write server config name
             else
@@ -765,14 +775,14 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
         int first_row = 1;
 
         // upstream name
-        b->last = ngx_sprintf(b->last, "<tr><th class=\"stcCommon stcHeader\" rowspan=\"%uA\">%s</th>",
-                              peers->number, uscf->host.data);
+        b->last = ngx_sprintf(b->last, "<tr><th class=\"stcCommon stcHeader%s\" rowspan=\"%uA\">%s</th>",
+							  (peers->number && !peers->peer[0].server) ? " stcImplicitUpstream" : "",
+							  peers->number, uscf->host.data);
 
         // upstream peers
         for (k = 0; k < peers->number; ++k)
         {
-            // only first row starts with upstream cell, others
-            // are separate ones
+            // only first row starts with upstream cell, others are separate ones
             if (!first_row)
             {
                 b->last = ngx_sprintf(b->last, "<tr>");
@@ -790,13 +800,23 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
                     blacklisted ? " stcBlacklisted" : "", disabled ? " stcDisabled" : "", uscf->host.data);
 
             // peer name
-            if (peers->peer[k].server->naddrs > 1)
+//            if (!peers->peer[k].server)
+//            {
+//            	// Dirty workaround. Strange bugs with nginx-created strings when using Duma
+//				size_t j;
+//				for (j = 0; j < peers->peer[k].name.len; ++j)
+//					b->last = ngx_sprintf(b->last, "%c", peers->peer[k].name.data[j]);
+//            	b->last = ngx_sprintf(b->last, "<br/>%s", uscf->host.data);
+//            }
+            if (!peers->peer[k].server || peers->peer[k].server->naddrs > 1)
             {
-                // dirty workaround. Strange bugs when using duma
+                // Dirty workaround. Strange bugs with nginx-created strings when using Duma
                 size_t j;
                 for (j = 0; j < peers->peer[k].name.len; ++j)
                     b->last = ngx_sprintf(b->last, "%c", peers->peer[k].name.data[j]);
-                b->last = ngx_sprintf(b->last, "<br/>(%s)", peers->peer[k].server->name.data);
+                b->last = (!peers->peer[k].server)
+                				? ngx_sprintf(b->last, "<br/>(%s)", uscf->host.data)
+								: ngx_sprintf(b->last, "<br/>(%s)", peers->peer[k].server->name.data);
             }
             else
                 b->last = ngx_sprintf(b->last, "%s", peers->peer[k].server->name.data);
@@ -909,23 +929,39 @@ static ngx_int_t ngx_http_ustats_toggle(ngx_http_request_t * r, ngx_http_ustats_
 
     if (ngx_strcmp(req.toggle_type.data, "peername") == 0)
     {
+    	// Count how many disabled backends are there in the upstream
+		ngx_uint_t down_count;
+		ngx_uint_t k;
+		for (k = 0; k < peers->number; ++k)
+			down_count += peers->peer[k].down;
+
         for (i = 0; i < peers->number; ++i)
         {
-            if (ngx_strncmp(peers->peer[i].name.data, req.backend.data, /*req.backend.len*/ peers->peer[i].name.len) == 0)
-            {
-            	// Check if only this peer is disabled, and if so, ignore toggle request
-            	ngx_uint_t down_count;
-            	ngx_uint_t k;
-            	for (k = 0; k < peers->number; ++k)
-            		down_count += peers->peer[k].down;
+        	// TODO remove
+        	printf("Looking at peer \"%s\"...\n", peers->peer[i].name.data);
+        	fflush(stdout);
 
+        	if (ngx_strncmp(peers->peer[i].name.data, req.backend.data,
+							/*req.backend.len*/ peers->peer[i].name.len) == 0)
+            {
+        		// Only one backend is enabled and the user wants to disable it
             	if (!peers->peer[i].down && (down_count == peers->number - 1))
             		return NGX_ERROR;
 
-            	// Do the stuff finally
-                peers->peer[i].down = !peers->peer[i].down;
-                peers->peer[i].weight = peers->peer[i].down ? 0 : peers->peer[i].server->weight;
-                peers->peer[i].current_weight = peers->peer[i].weight;
+            	// implicit?
+            	if (!peers->peer[i].server)
+            	{
+					peers->peer[i].down = !peers->peer[i].down;
+					// 1 is the default weight set by nginx for implicit upstreams
+					peers->peer[i].weight = peers->peer[i].down ? 0 : 1;
+					peers->peer[i].current_weight = peers->peer[i].weight;
+            	}
+            	else
+            	{
+					peers->peer[i].down = !peers->peer[i].down;
+					peers->peer[i].weight = peers->peer[i].down ? 0 : peers->peer[i].server->weight;
+					peers->peer[i].current_weight = peers->peer[i].weight;
+            	}
 
                 break;
             }
@@ -933,9 +969,13 @@ static ngx_int_t ngx_http_ustats_toggle(ngx_http_request_t * r, ngx_http_ustats_
     }
     else if (ngx_strcmp(req.toggle_type.data, "servername") == 0)
     {
+    	// Note: implicit backends are not supposed to fall into here, because
+    	// they always come with brackets
+
         for (i = 0; i < peers->number; ++i)
         {
-            if (ngx_strncmp(peers->peer[i].server->name.data, req.backend.data, /*req.backend.len*/ peers->peer[i].server->name.len) == 0)
+        	if (ngx_strncmp(peers->peer[i].server->name.data, req.backend.data,
+							req.backend.len /*peers->peer[i].server->name.len*/) == 0)
             {
             	// Check if only this peer is disabled, and if so, ignore toggle request
             	ngx_uint_t down_count;
@@ -1019,7 +1059,11 @@ static ngx_buf_t * ngx_http_ustats_create_response_upstream_xml(ngx_http_request
     for (k = 0; k < peers->number; ++k)
     {
         // determine whether peer name or both peer name and server name should be written
-        if (peers->peer[k].server->naddrs > 1)
+    	if (!peers->peer[k].server) // implicit upstream?
+    	{
+    		size += (uscf->host.len + 1) * sizeof(u_char);
+    	}
+    	else if (peers->peer[k].server->naddrs > 1)
         {
             size += (peers->peer[k].name.len + 1) * sizeof(u_char) + sizeof(" ()") +
                     (peers->peer[k].server->name.len + 1) * sizeof(u_char);
@@ -1043,6 +1087,10 @@ static ngx_buf_t * ngx_http_ustats_create_response_upstream_xml(ngx_http_request
     b->last = ngx_sprintf(b->last,"<upstream>\n  <name>%s</name>\n  <backends>\n", uscf->host.data);
     for (k = 0; k < peers->number; ++k)
     {
+    	if (!peers->peer[k].server)
+    	{
+    		b->last = ngx_sprintf(b->last, "    <backend>\n      <name>%s</name>\n", uscf->host.data);
+    	}
         if (peers->peer[k].server->naddrs > 1)
         {
             // Dirty workaround. '\0' is missed somewhere in nginx
@@ -1154,7 +1202,7 @@ static ngx_buf_t * ngx_http_ustats_create_response_backend_xml(ngx_http_request_
         return b;
     }
 
-    // calc size
+    // calculate size
     size = sizeof(
            "<backend>\n"
            "  <name></name>\n"
