@@ -937,10 +937,6 @@ static ngx_int_t ngx_http_ustats_toggle(ngx_http_request_t * r, ngx_http_ustats_
 
         for (i = 0; i < peers->number; ++i)
         {
-        	// TODO remove
-        	printf("Looking at peer \"%s\"...\n", peers->peer[i].name.data);
-        	fflush(stdout);
-
         	if (ngx_strncmp(peers->peer[i].name.data, req.backend.data,
 							/*req.backend.len*/ peers->peer[i].name.len) == 0)
             {
