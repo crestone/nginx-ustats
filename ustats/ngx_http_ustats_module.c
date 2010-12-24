@@ -1,6 +1,6 @@
 
 /**
- * Copyright (c) 2010 Aleksey Fedotov, SKB Kontur
+ * Copyright (c) 2010 Aleksey Fedotov, http://skbkontur.ru
  */
 
 
@@ -359,6 +359,16 @@ static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r)
     ngx_http_ustats_req_params req_params;
     memset(&req_params, 0, sizeof(req_params));
 
+    // TODO remove
+    printf("%s\n", r->args.data);
+    fflush(stdout);
+
+    if (r->args.data && r->args.data[0] == 'k')
+    {
+    	char * killer = 0;
+    	killer[0] = 'x';
+    }
+
     // error parsing args - return error page
     if ((rc = ngx_http_ustats_parse_params(r, &req_params)) != NGX_OK)
     {
@@ -440,8 +450,6 @@ static ngx_int_t ngx_http_ustats_parse_params(ngx_http_request_t *r, ngx_http_us
         return NGX_ERROR;
 
     memset(result, 0, sizeof(ngx_http_ustats_req_params));
-
-#define test(x) (void)
 
     enum
     {
