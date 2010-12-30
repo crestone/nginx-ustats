@@ -63,7 +63,7 @@ const char RESPONSE_HEAD[] =
 
 			   ".stcImplicitUpstream"
 			   "{"
-			   "	background-color: 23C3D5;"
+			   "	color: #FFFFFF;"
 			   "}"
 
                "/* Firefox seems to not like td:hover */"
