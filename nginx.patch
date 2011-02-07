@@ -1,21 +1,90 @@
 Only in ../nginx/src/core: .svn
 Only in ../nginx/src/event/modules: .svn
 Only in ../nginx/src/event: .svn
+diff -cr src/http/modules/ngx_http_upstream_ip_hash_module.c ../nginx/src/http/modules/ngx_http_upstream_ip_hash_module.c
+*** src/http/modules/ngx_http_upstream_ip_hash_module.c	2010-12-10 13:23:45.434567000 +0500
+--- ../nginx/src/http/modules/ngx_http_upstream_ip_hash_module.c	2011-02-07 17:09:47.389866002 +0500
+***************
+*** 187,192 ****
+--- 187,193 ----
+  
+                  if (now - peer->accessed > peer->fail_timeout) {
+                      peer->fails = 0;
++ 
+                      break;
+                  }
+              }
 Only in ../nginx/src/http/modules/perl: .svn
 Only in ../nginx/src/http/modules: .svn
 Only in ../nginx/src/http/modules: ustats
+diff -cr src/http/ngx_http.h ../nginx/src/http/ngx_http.h
+*** src/http/ngx_http.h	2010-12-10 13:23:45.434567000 +0500
+--- ../nginx/src/http/ngx_http.h	2011-02-07 15:07:41.859866002 +0500
+***************
+*** 156,159 ****
+--- 156,194 ----
+  extern ngx_http_output_body_filter_pt    ngx_http_top_body_filter;
+  
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++ 
++ /// Number of counters for each peer
++ #define USTATS_PEER_STATS_COUNT				8
++ 
++ /// Stat offset relative to the peer position within the shared memory
++ #define USTATS_REQ_STAT_INDEX				0
++ 
++ /// Holds HTTP 499 errors count
++ #define USTATS_HTTP499_STAT_INDEX			1
++ 
++ /// Holds HTTP 500 errors count
++ #define USTATS_HTTP500_STAT_INDEX			2
++ 
++ /// Holds HTTP 503 errors count
++ #define USTATS_HTTP503_STAT_INDEX			3
++ 
++ /// Holds TCP errors count
++ #define USTATS_TCP_ERR_STAT_INDEX			4
++ 
++ /// Holds read timeouts count
++ #define USTATS_READ_TIMEOUT_STAT_INDEX		5
++ 
++ /// Holds write timeouts count
++ #define USTATS_WRITE_TIMEOUT_STAT_INDEX		6
++ 
++ /// Holds last failed access time across all workers
++ #define USTATS_BLACKLISTED_STAT_INDEX		7
++ 
++ /// Shared memory for storing counters. Defined in ngx_http_ustats_module.c
++ extern ngx_shm_zone_t * stats_data;
++ 
++ #endif
++ 
++ 
+  #endif /* _NGX_HTTP_H_INCLUDED_ */
 diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
 *** src/http/ngx_http_upstream.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream.c	2010-12-16 17:10:37.654567000 +0500
+--- ../nginx/src/http/ngx_http_upstream.c	2011-02-07 17:06:51.929866002 +0500
+***************
+*** 136,141 ****
+--- 136,142 ----
+  #endif
+  
+  
++ 
+  ngx_http_upstream_header_t  ngx_http_upstream_headers_in[] = {
+  
+      { ngx_string("Status"),
 ***************
 *** 1106,1111 ****
---- 1106,1116 ----
+--- 1107,1118 ----
   
       c = u->peer.connection;
   
 + #if (NGX_HAVE_USTATS_MODULE)
 +     ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+     rrp->peers->peer[rrp->current].num_reqs++;
++     ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++     		rrp->peers->peer[rrp->current].shm_start_ind + USTATS_REQ_STAT_INDEX, 1);
 + #endif
 + 
       c->data = r;
@@ -23,34 +92,40 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
       c->write->handler = ngx_http_upstream_handler;
 ***************
 *** 1416,1421 ****
---- 1421,1431 ----
+--- 1423,1436 ----
                      "http upstream send request handler");
   
       if (c->write->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
 +         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         rrp->peers->peer[rrp->current].num_http_write_timeout++;
-+     #endif
++         //rrp->peers->peer[rrp->current].num_http_write_timeout++;
++ 
++         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_WRITE_TIMEOUT_STAT_INDEX, 1);
++ #endif
 + 
           ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_TIMEOUT);
           return;
       }
 ***************
 *** 1456,1461 ****
---- 1466,1475 ----
+--- 1471,1483 ----
       c->log->action = "reading response header from upstream";
   
       if (c->read->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
 +         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         rrp->peers->peer[rrp->current].num_http_read_timeout++;
++         //rrp->peers->peer[rrp->current].num_http_read_timeout++;
++ 
++         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_READ_TIMEOUT_STAT_INDEX, 1);
 + #endif
           ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_TIMEOUT);
           return;
       }
 ***************
 *** 1636,1641 ****
---- 1650,1670 ----
+--- 1658,1681 ----
   
       status = u->headers_in.status_n;
   
@@ -59,11 +134,14 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
 +     switch (status)
 +     {
 +     case 500:
-+         rrp->peers->peer[rrp->current].num_http_500++;
++     	ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP500_STAT_INDEX, 1);
 +         break;
++ 
 +     case 503:
-+         rrp->peers->peer[rrp->current].num_http_503++;
-+         break;
++     	ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP503_STAT_INDEX, 1);
++ 
 +     default:
 +         break;
 +     }
@@ -73,15 +151,36 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
   
           if (status != un->status) {
 ***************
+*** 2780,2785 ****
+--- 2820,2833 ----
+  {
+      ngx_uint_t  status, state;
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++ 	ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
++ 
++ 	if (rrp->peers->peer[rrp->current].fails + 1 >= rrp->peers->peer[rrp->current].max_fails
++ 		|| rrp->peers->peer[rrp->current].max_fails == 1)
++ 		((time_t*)stats_data->data)[rrp->peers->peer[rrp->current].shm_start_ind + USTATS_BLACKLISTED_STAT_INDEX] = ngx_time();
++ #endif
++ 
+      ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                     "http next upstream, %xi", ft_type);
+  
+***************
 *** 3020,3025 ****
---- 3049,3061 ----
+--- 3068,3084 ----
           rc = ngx_http_send_special(r, NGX_HTTP_LAST);
       }
   
 + #if (NGX_HAVE_USTATS_MODULE)
 +     ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
 +     if (rc == NGX_HTTP_CLIENT_CLOSED_REQUEST)
-+         rrp->peers->peer[rrp->current].num_http_499++;
++     {
++         //rrp->peers->peer[rrp->current].num_http_499++;
++     	ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP499_STAT_INDEX, 1);
++     }
 + #endif
 + 
 + 
@@ -89,8 +188,18 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
   }
   
 ***************
+*** 3932,3937 ****
+--- 3991,3997 ----
+  #endif
+  
+  
++ 
+  static char *
+  ngx_http_upstream(ngx_conf_t *cf, ngx_command_t *cmd, void *dummy)
+  {
+***************
 *** 4074,4079 ****
---- 4110,4121 ----
+--- 4134,4145 ----
       u.url = value[1];
       u.default_port = 80;
   
@@ -121,7 +230,7 @@ diff -cr src/http/ngx_http_upstream.h ../nginx/src/http/ngx_http_upstream.h
   
 diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_upstream_round_robin.c
 *** src/http/ngx_http_upstream_round_robin.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.c	2010-12-16 17:01:13.984567000 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.c	2011-02-07 17:07:37.429866002 +0500
 ***************
 *** 9,16 ****
   #include <ngx_http.h>
@@ -132,10 +241,15 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   static ngx_uint_t
   ngx_http_upstream_get_peer(ngx_http_upstream_rr_peers_t *peers);
   
---- 9,17 ----
+--- 9,22 ----
   #include <ngx_http.h>
   
   
+! #if (NGX_HAVE_USTATS_MODULE)
+! static ngx_uint_t shm_peer_index = 0;
+! #endif
+! 
+! 
 ! static ngx_int_t
 ! ngx_http_upstream_cmp_servers(const void *one, const void *two);
 ! 
@@ -143,66 +257,75 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   ngx_http_upstream_get_peer(ngx_http_upstream_rr_peers_t *peers);
   
 ***************
+*** 23,31 ****
+--- 29,40 ----
+      ngx_uint_t                     i, j, n;
+      ngx_http_upstream_server_t    *server;
+      ngx_http_upstream_rr_peers_t  *peers, *backup;
++     ngx_uint_t					   peers_count;
+  
+      us->peer.init = ngx_http_upstream_init_round_robin_peer;
+  
++     peers_count = 0;
++ 
+      if (us->servers) {
+          server = us->servers->elts;
+  
+***************
+*** 51,56 ****
+--- 60,66 ----
+  
+          n = 0;
+  
++ 
+          for (i = 0; i < us->servers->nelts; i++) {
+              for (j = 0; j < server[i].naddrs; j++) {
+                  if (server[i].backup) {
+***************
 *** 65,70 ****
---- 66,81 ----
+--- 75,85 ----
                   peers->peer[n].down = server[i].down;
                   peers->peer[n].weight = server[i].down ? 0 : server[i].weight;
                   peers->peer[n].current_weight = peers->peer[n].weight;
 + #if (NGX_HAVE_USTATS_MODULE)
 +                 peers->peer[n].server = server + i;
-+                 peers->peer[n].num_reqs = 0;
-+                 peers->peer[n].num_http_499 = 0;
-+                 peers->peer[n].num_http_500 = 0;
-+                 peers->peer[n].num_http_503 = 0;
-+                 peers->peer[n].num_tcp_error = 0;
-+                 peers->peer[n].num_http_read_timeout = 0;
-+                 peers->peer[n].num_http_write_timeout = 0;
++                 peers->peer[n].shm_start_ind = shm_peer_index;
++                 shm_peer_index += USTATS_PEER_STATS_COUNT;
 + #endif
                   n++;
               }
           }
 ***************
 *** 118,123 ****
---- 129,145 ----
+--- 133,143 ----
                   backup->peer[n].max_fails = server[i].max_fails;
                   backup->peer[n].fail_timeout = server[i].fail_timeout;
                   backup->peer[n].down = server[i].down;
 + #if (NGX_HAVE_USTATS_MODULE)
 +                 backup->peer[n].server = server + i;
-+                 backup->peer[n].num_reqs = 0;
-+                 backup->peer[n].num_http_499 = 0;
-+                 backup->peer[n].num_http_500 = 0;
-+                 backup->peer[n].num_http_503 = 0;
-+                 backup->peer[n].num_tcp_error = 0;
-+                 backup->peer[n].num_http_read_timeout = 0;
-+                 backup->peer[n].num_http_write_timeout = 0;
++                 backup->peer[n].shm_start_ind = shm_peer_index;
++                 shm_peer_index += USTATS_PEER_STATS_COUNT;
 + #endif
-+ 
                   n++;
               }
           }
 ***************
 *** 176,181 ****
---- 198,213 ----
+--- 196,206 ----
           peers->peer[i].current_weight = 1;
           peers->peer[i].max_fails = 1;
           peers->peer[i].fail_timeout = 10;
 + #if (NGX_HAVE_USTATS_MODULE)
 +         peers->peer[i].server = NULL;
-+         peers->peer[i].num_reqs = 0;
-+         peers->peer[i].num_http_499 = 0;
-+         peers->peer[i].num_http_500 = 0;
-+         peers->peer[i].num_http_503 = 0;
-+         peers->peer[i].num_tcp_error = 0;
-+         peers->peer[i].num_http_read_timeout = 0;
-+         peers->peer[i].num_http_write_timeout = 0;
++         peers->peer[i].shm_start_ind = shm_peer_index;
++         shm_peer_index += USTATS_PEER_STATS_COUNT;
 + #endif
       }
   
       us->peer.data = peers;
 ***************
 *** 186,191 ****
---- 218,224 ----
+--- 211,217 ----
   }
   
   
@@ -210,12 +333,32 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   static ngx_int_t
   ngx_http_upstream_cmp_servers(const void *one, const void *two)
   {
+***************
+*** 512,517 ****
+--- 538,544 ----
+              }
+  
+              peer->current_weight--;
++ 
+          }
+  
+          rrp->tried[n] |= m;
+***************
+*** 644,649 ****
+--- 671,677 ----
+  
+      if (rrp->peers->single) {
+          pc->tries = 0;
++ 
+          return;
+      }
+  
 diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_upstream_round_robin.h
 *** src/http/ngx_http_upstream_round_robin.h	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.h	2010-12-16 09:25:09.994567000 +0500
+--- ../nginx/src/http/ngx_http_upstream_round_robin.h	2011-02-03 15:38:40.129866002 +0500
 ***************
 *** 32,37 ****
---- 32,49 ----
+--- 32,43 ----
   #if (NGX_HTTP_SSL)
       ngx_ssl_session_t              *ssl_session;   /* local to a process */
   #endif
@@ -223,17 +366,19 @@ diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_ups
 + #if (NGX_HAVE_USTATS_MODULE)
 +     /* points to the server whose configuration was used for this peer */
 +     ngx_http_upstream_server_t      *server;
-+     ngx_uint_t                      num_reqs;
-+     ngx_uint_t                      num_http_499;
-+     ngx_uint_t                      num_http_500;
-+     ngx_uint_t                      num_http_503;
-+     ngx_uint_t                      num_tcp_error;
-+     ngx_uint_t                      num_http_read_timeout;
-+     ngx_uint_t                      num_http_write_timeout;
++     ngx_uint_t						shm_start_ind;
 + #endif
   } ngx_http_upstream_rr_peer_t;
   
   
+***************
+*** 81,84 ****
+--- 87,91 ----
+  #endif
+  
+  
++ 
+  #endif /* _NGX_HTTP_UPSTREAM_ROUND_ROBIN_H_INCLUDED_ */
 Only in ../nginx/src/http: .svn
 Only in ../nginx/src/mail: .svn
 Only in ../nginx/src/misc: .svn
