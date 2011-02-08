@@ -1,9 +1,9 @@
-Only in ../nginx/src/core: .svn
-Only in ../nginx/src/event/modules: .svn
-Only in ../nginx/src/event: .svn
-diff -cr src/http/modules/ngx_http_upstream_ip_hash_module.c ../nginx/src/http/modules/ngx_http_upstream_ip_hash_module.c
+Only in ../nginx-0.8.53-dev/src/core: .svn
+Only in ../nginx-0.8.53-dev/src/event/modules: .svn
+Only in ../nginx-0.8.53-dev/src/event: .svn
+diff -cr src/http/modules/ngx_http_upstream_ip_hash_module.c ../nginx-0.8.53-dev/src/http/modules/ngx_http_upstream_ip_hash_module.c
 *** src/http/modules/ngx_http_upstream_ip_hash_module.c	2010-12-10 13:23:45.434567000 +0500
---- ../nginx/src/http/modules/ngx_http_upstream_ip_hash_module.c	2011-02-07 17:09:47.389866002 +0500
+--- ../nginx-0.8.53-dev/src/http/modules/ngx_http_upstream_ip_hash_module.c	2011-02-07 17:09:47.389866002 +0500
 ***************
 *** 187,192 ****
 --- 187,193 ----
@@ -14,12 +14,12 @@ diff -cr src/http/modules/ngx_http_upstream_ip_hash_module.c ../nginx/src/http/m
                       break;
                   }
               }
-Only in ../nginx/src/http/modules/perl: .svn
-Only in ../nginx/src/http/modules: .svn
-Only in ../nginx/src/http/modules: ustats
-diff -cr src/http/ngx_http.h ../nginx/src/http/ngx_http.h
+Only in ../nginx-0.8.53-dev/src/http/modules/perl: .svn
+Only in ../nginx-0.8.53-dev/src/http/modules: .svn
+Only in ../nginx-0.8.53-dev/src/http/modules: ustats
+diff -cr src/http/ngx_http.h ../nginx-0.8.53-dev/src/http/ngx_http.h
 *** src/http/ngx_http.h	2010-12-10 13:23:45.434567000 +0500
---- ../nginx/src/http/ngx_http.h	2011-02-07 15:07:41.859866002 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http.h	2011-02-07 15:07:41.859866002 +0500
 ***************
 *** 156,159 ****
 --- 156,194 ----
@@ -62,9 +62,9 @@ diff -cr src/http/ngx_http.h ../nginx/src/http/ngx_http.h
 + 
 + 
   #endif /* _NGX_HTTP_H_INCLUDED_ */
-diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
+diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c
 *** src/http/ngx_http_upstream.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream.c	2011-02-07 17:06:51.929866002 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c	2011-02-08 09:31:47.249866002 +0500
 ***************
 *** 136,141 ****
 --- 136,142 ----
@@ -92,14 +92,12 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
       c->write->handler = ngx_http_upstream_handler;
 ***************
 *** 1416,1421 ****
---- 1423,1436 ----
+--- 1423,1434 ----
                      "http upstream send request handler");
   
       if (c->write->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
 +         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         //rrp->peers->peer[rrp->current].num_http_write_timeout++;
-+ 
 +         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
 + 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_WRITE_TIMEOUT_STAT_INDEX, 1);
 + #endif
@@ -109,14 +107,12 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
       }
 ***************
 *** 1456,1461 ****
---- 1471,1483 ----
+--- 1469,1479 ----
       c->log->action = "reading response header from upstream";
   
       if (c->read->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
 +         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         //rrp->peers->peer[rrp->current].num_http_read_timeout++;
-+ 
 +         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
 + 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_READ_TIMEOUT_STAT_INDEX, 1);
 + #endif
@@ -125,7 +121,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
       }
 ***************
 *** 1636,1641 ****
---- 1658,1681 ----
+--- 1654,1677 ----
   
       status = u->headers_in.status_n;
   
@@ -152,7 +148,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
           if (status != un->status) {
 ***************
 *** 2780,2785 ****
---- 2820,2833 ----
+--- 2816,2829 ----
   {
       ngx_uint_t  status, state;
   
@@ -169,7 +165,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
   
 ***************
 *** 3020,3025 ****
---- 3068,3084 ----
+--- 3064,3079 ----
           rc = ngx_http_send_special(r, NGX_HTTP_LAST);
       }
   
@@ -177,7 +173,6 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
 +     ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
 +     if (rc == NGX_HTTP_CLIENT_CLOSED_REQUEST)
 +     {
-+         //rrp->peers->peer[rrp->current].num_http_499++;
 +     	ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
 + 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP499_STAT_INDEX, 1);
 +     }
@@ -189,7 +184,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
   
 ***************
 *** 3932,3937 ****
---- 3991,3997 ----
+--- 3986,3992 ----
   #endif
   
   
@@ -199,7 +194,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
   {
 ***************
 *** 4074,4079 ****
---- 4134,4145 ----
+--- 4129,4140 ----
       u.url = value[1];
       u.default_port = 80;
   
@@ -212,9 +207,9 @@ diff -cr src/http/ngx_http_upstream.c ../nginx/src/http/ngx_http_upstream.c
       if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
           if (u.err) {
               ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-diff -cr src/http/ngx_http_upstream.h ../nginx/src/http/ngx_http_upstream.h
+diff -cr src/http/ngx_http_upstream.h ../nginx-0.8.53-dev/src/http/ngx_http_upstream.h
 *** src/http/ngx_http_upstream.h	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream.h	2010-12-07 15:44:09.506474001 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.h	2010-12-07 15:44:09.506474001 +0500
 ***************
 *** 89,94 ****
 --- 89,98 ----
@@ -228,9 +223,9 @@ diff -cr src/http/ngx_http_upstream.h ../nginx/src/http/ngx_http_upstream.h
   } ngx_http_upstream_server_t;
   
   
-diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_upstream_round_robin.c
+diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c
 *** src/http/ngx_http_upstream_round_robin.c	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.c	2011-02-07 17:07:37.429866002 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-02-08 09:33:01.709866002 +0500
 ***************
 *** 9,16 ****
   #include <ngx_http.h>
@@ -241,11 +236,12 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   static ngx_uint_t
   ngx_http_upstream_get_peer(ngx_http_upstream_rr_peers_t *peers);
   
---- 9,22 ----
+--- 9,23 ----
   #include <ngx_http.h>
   
   
 ! #if (NGX_HAVE_USTATS_MODULE)
+! /// Used to calculate each backend offset in shared memory
 ! static ngx_uint_t shm_peer_index = 0;
 ! #endif
 ! 
@@ -258,7 +254,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   
 ***************
 *** 23,31 ****
---- 29,40 ----
+--- 30,41 ----
       ngx_uint_t                     i, j, n;
       ngx_http_upstream_server_t    *server;
       ngx_http_upstream_rr_peers_t  *peers, *backup;
@@ -273,7 +269,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   
 ***************
 *** 51,56 ****
---- 60,66 ----
+--- 61,67 ----
   
           n = 0;
   
@@ -283,7 +279,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
                   if (server[i].backup) {
 ***************
 *** 65,70 ****
---- 75,85 ----
+--- 76,86 ----
                   peers->peer[n].down = server[i].down;
                   peers->peer[n].weight = server[i].down ? 0 : server[i].weight;
                   peers->peer[n].current_weight = peers->peer[n].weight;
@@ -297,7 +293,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
           }
 ***************
 *** 118,123 ****
---- 133,143 ----
+--- 134,144 ----
                   backup->peer[n].max_fails = server[i].max_fails;
                   backup->peer[n].fail_timeout = server[i].fail_timeout;
                   backup->peer[n].down = server[i].down;
@@ -311,7 +307,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
           }
 ***************
 *** 176,181 ****
---- 196,206 ----
+--- 197,207 ----
           peers->peer[i].current_weight = 1;
           peers->peer[i].max_fails = 1;
           peers->peer[i].fail_timeout = 10;
@@ -325,7 +321,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
       us->peer.data = peers;
 ***************
 *** 186,191 ****
---- 211,217 ----
+--- 212,218 ----
   }
   
   
@@ -335,7 +331,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
   {
 ***************
 *** 512,517 ****
---- 538,544 ----
+--- 539,545 ----
               }
   
               peer->current_weight--;
@@ -345,7 +341,7 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
           rrp->tried[n] |= m;
 ***************
 *** 644,649 ****
---- 671,677 ----
+--- 672,678 ----
   
       if (rrp->peers->single) {
           pc->tries = 0;
@@ -353,9 +349,9 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx/src/http/ngx_http_ups
           return;
       }
   
-diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_upstream_round_robin.h
+diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.h
 *** src/http/ngx_http_upstream_round_robin.h	2010-12-10 13:23:45.424567000 +0500
---- ../nginx/src/http/ngx_http_upstream_round_robin.h	2011-02-03 15:38:40.129866002 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.h	2011-02-03 15:38:40.129866002 +0500
 ***************
 *** 32,37 ****
 --- 32,43 ----
@@ -379,9 +375,9 @@ diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx/src/http/ngx_http_ups
   
 + 
   #endif /* _NGX_HTTP_UPSTREAM_ROUND_ROBIN_H_INCLUDED_ */
-Only in ../nginx/src/http: .svn
-Only in ../nginx/src/mail: .svn
-Only in ../nginx/src/misc: .svn
-Only in ../nginx/src/os: .svn
-Only in ../nginx/src/os/unix: .svn
-Only in ../nginx/src: .svn
+Only in ../nginx-0.8.53-dev/src/http: .svn
+Only in ../nginx-0.8.53-dev/src/mail: .svn
+Only in ../nginx-0.8.53-dev/src/misc: .svn
+Only in ../nginx-0.8.53-dev/src/os: .svn
+Only in ../nginx-0.8.53-dev/src/os/unix: .svn
+Only in ../nginx-0.8.53-dev/src: .svn
