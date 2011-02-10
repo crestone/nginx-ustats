@@ -1,10 +1,3 @@
-Only in ../nginx-0.8.53-dev/src/core: .svn
-Only in ../nginx-0.8.53-dev/src/event/modules: .svn
-Only in ../nginx-0.8.53-dev/src/event: .svn
-Only in ../nginx-0.8.53-dev/src/http/modules/perl: .svn
-Only in ../nginx-0.8.53-dev/src/http/modules: .svn
-Only in ../nginx-0.8.53-dev/src/http/modules: ustats
-diff -cr src/http/ngx_http.h ../nginx-0.8.53-dev/src/http/ngx_http.h
 *** src/http/ngx_http.h	2011-02-08 10:39:27.029866002 +0500
 --- ../nginx-0.8.53-dev/src/http/ngx_http.h	2011-02-08 09:56:13.779866000 +0500
 ***************
@@ -48,19 +41,21 @@ diff -cr src/http/ngx_http.h ../nginx-0.8.53-dev/src/http/ngx_http.h
 + 
 + 
   #endif /* _NGX_HTTP_H_INCLUDED_ */
-diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c
 *** src/http/ngx_http_upstream.c	2011-02-08 10:39:27.019866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c	2011-02-08 10:08:12.969866000 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c	2011-02-10 16:55:35.719812122 +0500
 ***************
 *** 1106,1111 ****
---- 1106,1117 ----
+--- 1106,1120 ----
   
       c = u->peer.connection;
   
 + #if (NGX_HAVE_USTATS_MODULE)
-+     ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+     ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
-+         rrp->peers->peer[rrp->current].shm_start_ind + USTATS_REQ_STAT_INDEX, 1);
++     if (stats_data)
++     {
++ 		ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 		ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 			rrp->peers->peer[rrp->current].shm_start_ind + USTATS_REQ_STAT_INDEX, 1);
++     }
 + #endif
 + 
       c->data = r;
@@ -68,53 +63,62 @@ diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upst
       c->write->handler = ngx_http_upstream_handler;
 ***************
 *** 1416,1421 ****
---- 1422,1432 ----
+--- 1425,1438 ----
                      "http upstream send request handler");
   
       if (c->write->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
-+         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
-+             rrp->peers->peer[rrp->current].shm_start_ind + USTATS_WRITE_TIMEOUT_STAT_INDEX, 1);
++ 		if (stats_data)
++ 		{
++ 			ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 			ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_WRITE_TIMEOUT_STAT_INDEX, 1);
++ 		}
 + #endif
           ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_TIMEOUT);
           return;
       }
 ***************
 *** 1456,1461 ****
---- 1467,1477 ----
+--- 1473,1486 ----
       c->log->action = "reading response header from upstream";
   
       if (c->read->timedout) {
 + #if (NGX_HAVE_USTATS_MODULE)
-+         ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
-+             rrp->peers->peer[rrp->current].shm_start_ind + USTATS_READ_TIMEOUT_STAT_INDEX, 1);
++ 		if (stats_data)
++ 		{
++ 			ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 			ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 				rrp->peers->peer[rrp->current].shm_start_ind + USTATS_READ_TIMEOUT_STAT_INDEX, 1);
++ 		}
 + #endif
           ngx_http_upstream_next(r, u, NGX_HTTP_UPSTREAM_FT_TIMEOUT);
           return;
       }
 ***************
 *** 1636,1641 ****
---- 1652,1675 ----
+--- 1661,1687 ----
   
       status = u->headers_in.status_n;
   
 + #if (NGX_HAVE_USTATS_MODULE)
-+     ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
-+     switch (status)
++     if (stats_data)
 +     {
-+         case 500:
-+             ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
-+                 rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP500_STAT_INDEX, 1);
-+             break;
++ 		ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 		switch (status)
++ 		{
++ 			case 500:
++ 				ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 					rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP500_STAT_INDEX, 1);
++ 				break;
 + 
-+         case 503:
-+             ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
-+                 rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP503_STAT_INDEX, 1);
++ 			case 503:
++ 				ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 					rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP503_STAT_INDEX, 1);
 + 
-+         default:
-+             break;
++ 			default:
++ 				break;
++ 		}
 +     }
 + #endif
 + 
@@ -123,15 +127,18 @@ diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upst
           if (status != un->status) {
 ***************
 *** 2780,2785 ****
---- 2814,2826 ----
+--- 2826,2841 ----
   {
       ngx_uint_t  status, state;
   
 + #if (NGX_HAVE_USTATS_MODULE)
-+     ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
-+     if (rrp->peers->peer[rrp->current].fails + 1 >= rrp->peers->peer[rrp->current].max_fails
-+         || rrp->peers->peer[rrp->current].max_fails == 1)
-+         ((time_t*)stats_data->data)[rrp->peers->peer[rrp->current].shm_start_ind + USTATS_BLACKLISTED_STAT_INDEX] = ngx_time();
++     if (stats_data)
++     {
++ 		ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
++ 		if (rrp->peers->peer[rrp->current].fails + 1 >= rrp->peers->peer[rrp->current].max_fails
++ 			|| rrp->peers->peer[rrp->current].max_fails == 1)
++ 			((time_t*)stats_data->data)[rrp->peers->peer[rrp->current].shm_start_ind + USTATS_BLACKLISTED_STAT_INDEX] = ngx_time();
++     }
 + #endif
 + 
       ngx_log_debug1(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
@@ -139,16 +146,19 @@ diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upst
   
 ***************
 *** 3020,3025 ****
---- 3061,3075 ----
+--- 3076,3093 ----
           rc = ngx_http_send_special(r, NGX_HTTP_LAST);
       }
   
 + #if (NGX_HAVE_USTATS_MODULE)
-+     ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
-+     if (rc == NGX_HTTP_CLIENT_CLOSED_REQUEST)
++     if (stats_data)
 +     {
-+         ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data + 
-+                 rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP499_STAT_INDEX, 1);
++ 		ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
++ 		if (rc == NGX_HTTP_CLIENT_CLOSED_REQUEST)
++ 		{
++ 			ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
++ 					rrp->peers->peer[rrp->current].shm_start_ind + USTATS_HTTP499_STAT_INDEX, 1);
++ 		}
 +     }
 + #endif
 + 
@@ -157,7 +167,7 @@ diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upst
   
 ***************
 *** 4074,4079 ****
---- 4124,4135 ----
+--- 4142,4153 ----
       u.url = value[1];
       u.default_port = 80;
   
@@ -170,7 +180,6 @@ diff -cr src/http/ngx_http_upstream.c ../nginx-0.8.53-dev/src/http/ngx_http_upst
       if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
           if (u.err) {
               ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-diff -cr src/http/ngx_http_upstream.h ../nginx-0.8.53-dev/src/http/ngx_http_upstream.h
 *** src/http/ngx_http_upstream.h	2011-02-08 10:39:27.019866002 +0500
 --- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.h	2011-02-08 10:29:41.519866001 +0500
 ***************
@@ -186,7 +195,6 @@ diff -cr src/http/ngx_http_upstream.h ../nginx-0.8.53-dev/src/http/ngx_http_upst
   } ngx_http_upstream_server_t;
   
   
-diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c
 *** src/http/ngx_http_upstream_round_robin.c	2011-02-08 10:39:27.019866002 +0500
 --- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-02-08 10:33:53.969866001 +0500
 ***************
@@ -244,7 +252,6 @@ diff -cr src/http/ngx_http_upstream_round_robin.c ../nginx-0.8.53-dev/src/http/n
       }
   
       us->peer.data = peers;
-diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.h
 *** src/http/ngx_http_upstream_round_robin.h	2011-02-08 10:39:27.019866002 +0500
 --- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.h	2011-02-08 10:28:55.739866001 +0500
 ***************
@@ -262,9 +269,3 @@ diff -cr src/http/ngx_http_upstream_round_robin.h ../nginx-0.8.53-dev/src/http/n
   } ngx_http_upstream_rr_peer_t;
   
   
-Only in ../nginx-0.8.53-dev/src/http: .svn
-Only in ../nginx-0.8.53-dev/src/mail: .svn
-Only in ../nginx-0.8.53-dev/src/misc: .svn
-Only in ../nginx-0.8.53-dev/src/os: .svn
-Only in ../nginx-0.8.53-dev/src/os/unix: .svn
-Only in ../nginx-0.8.53-dev/src: .svn

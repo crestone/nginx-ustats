@@ -436,7 +436,7 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
                 sizeof(ngx_uint_t);
 
         // Explicit or implicit
-        if (peers->number && !peers->peer[0].server)
+        if ((peers->number && (!peers->peer[0].server || !peers->peer[0].server->name.data)))
         	size += sizeof(" stcImplicitUpstream");
 
         // upstream name
@@ -571,8 +571,8 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
 
         // upstream name
         b->last = ngx_sprintf(b->last, "<tr><th class=\"stcCommon stcHeader%s\" rowspan=\"%uA\">%s</th>",
-							  (peers->number && !peers->peer[0].server) ? " stcImplicitUpstream" : "",
-							  peers->number, uscf->host.data);
+							  (peers->number && (!peers->peer[0].server || !peers->peer[0].server->name.data))
+									  ? " stcImplicitUpstream" : "", peers->number, uscf->host.data);
 
         // upstream peers
         for (k = 0; k < peers->number; ++k)
@@ -592,18 +592,25 @@ static ngx_buf_t * ngx_http_ustats_create_response_full_html(ngx_http_request_t 
             b->last = ngx_sprintf(b->last, "<td class=\"stcCommon stcPeer%s%s\">",
 					blacklisted ? " stcBlacklisted" : "", disabled ? " stcDisabled" : "", uscf->host.data);
 
+            // OMG
             if (!peers->peer[k].server || peers->peer[k].server->naddrs > 1)
             {
-                // Dirty workaround. Strange bugs with nginx-created strings when using Duma
+                // Dirty workaround. Strange bugs with nginx-created strings when running under Duma
                 size_t j;
+                // Peer name (resolved)
                 for (j = 0; j < peers->peer[k].name.len; ++j)
                     b->last = ngx_sprintf(b->last, "%c", peers->peer[k].name.data[j]);
+                // Initial config name (unresolved)
                 b->last = (!peers->peer[k].server)
-                				? ngx_sprintf(b->last, "<br/>(%s)", uscf->host.data)
-								: ngx_sprintf(b->last, "<br/>(%s)", peers->peer[k].server->name.data);
+								? ngx_sprintf(b->last, "<br/>(%s)", uscf->host.data)
+								: ngx_sprintf(b->last, "<br/>(%s)", (char*)peers->peer[k].server->name.data);
             }
             else
-                b->last = ngx_sprintf(b->last, "%s", peers->peer[k].server->name.data);
+            {
+            	b->last = ngx_sprintf(b->last, "%s", (peers->peer[k].server->name.data
+            			? (char*)peers->peer[k].server->name.data
+            			: (char*)uscf->host.data));
+            }
 
             b->last = ngx_sprintf(b->last, "</td>");
 
