@@ -1,6 +1,6 @@
 
 /**
- * Copyright (c) 2010-2011 Aleksey Fedotov
+ * Copyright (c) 2010-2011 Aleksey "0xc0dec" Fedotov
  * http://skbkontur.ru
  */
 
@@ -101,7 +101,7 @@ const char RESPONSE_BODY_END[] =
 
 
 /**
- * Shared memory used to store all the stats
+ * Shared memory used to store all stats
  */
 ngx_shm_zone_t * stats_data = NULL;
 

@@ -1,5 +1,5 @@
 *** src/http/ngx_http.h	2011-02-08 10:39:27.029866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http.h	2011-02-08 09:56:13.779866000 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http.h	2011-02-28 13:12:54.450333001 +0500
 ***************
 *** 156,159 ****
 --- 156,193 ----
@@ -196,62 +196,105 @@
   
   
 *** src/http/ngx_http_upstream_round_robin.c	2011-02-08 10:39:27.019866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-02-08 10:33:53.969866001 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-02-28 13:01:39.930333001 +0500
 ***************
-*** 8,13 ****
---- 8,17 ----
-  #include <ngx_core.h>
+*** 9,14 ****
+--- 9,24 ----
   #include <ngx_http.h>
   
+  
 + #if (NGX_HAVE_USTATS_MODULE)
-+ static ngx_uint_t shm_peer_index = 0;
++ ngx_uint_t ustats_shm_index = 0;
 + #endif
 + 
-  
++ 
++ #if (NGX_HAVE_USTATS_MODULE)
++ static ngx_int_t
++ ngx_http_upstream_cmp_implicit_servers(const void * one, const void * two);
++ #endif
++ 
   static ngx_int_t ngx_http_upstream_cmp_servers(const void *one,
       const void *two);
+  static ngx_uint_t
 ***************
 *** 65,70 ****
---- 69,79 ----
+--- 75,85 ----
                   peers->peer[n].down = server[i].down;
                   peers->peer[n].weight = server[i].down ? 0 : server[i].weight;
                   peers->peer[n].current_weight = peers->peer[n].weight;
 + #if (NGX_HAVE_USTATS_MODULE)
 +                 peers->peer[n].server = server + i;
-+                 peers->peer[n].shm_start_ind = shm_peer_index;
-+                 shm_peer_index += USTATS_PEER_STATS_COUNT;
++                 peers->peer[n].shm_start_ind = ustats_shm_index;
++                 ustats_shm_index += USTATS_PEER_STATS_COUNT;
 + #endif
                   n++;
               }
           }
 ***************
 *** 118,123 ****
---- 127,137 ----
+--- 133,143 ----
                   backup->peer[n].max_fails = server[i].max_fails;
                   backup->peer[n].fail_timeout = server[i].fail_timeout;
                   backup->peer[n].down = server[i].down;
 + #if (NGX_HAVE_USTATS_MODULE)
 +                 peers->peer[n].server = server + i;
-+                 peers->peer[n].shm_start_ind = shm_peer_index;
-+                 shm_peer_index += USTATS_PEER_STATS_COUNT;
++                 peers->peer[n].shm_start_ind = ustats_shm_index;
++                 ustats_shm_index += USTATS_PEER_STATS_COUNT;
 + #endif
                   n++;
               }
           }
 ***************
-*** 176,181 ****
---- 190,200 ----
-          peers->peer[i].current_weight = 1;
-          peers->peer[i].max_fails = 1;
+*** 178,183 ****
+--- 198,222 ----
           peers->peer[i].fail_timeout = 10;
-+ #if (NGX_HAVE_USTATS_MODULE)
-+         peers->peer[i].server = NULL;
-+         peers->peer[i].shm_start_ind = shm_peer_index;
-+         shm_peer_index += USTATS_PEER_STATS_COUNT;
-+ #endif
       }
   
++ #if (NGX_HAVE_USTATS_MODULE)
++ 	/**
++ 	 * Implicit peers order may change between two
++ 	 * configuration rescans. To maintain pointer
++ 	 * correctness, we always sort peers here
++ 	 */
++ 
++     ngx_sort(&peers->peer[0], (size_t)u.naddrs,
++ 			 sizeof(ngx_http_upstream_rr_peer_t),
++ 			 ngx_http_upstream_cmp_implicit_servers);
++ 
++     for (i = 0; i < u.naddrs; i++)
++     {
++         peers->peer[i].server = NULL;
++         peers->peer[i].shm_start_ind = ustats_shm_index;
++         ustats_shm_index += USTATS_PEER_STATS_COUNT;
++     }
++ #endif
++ 
       us->peer.data = peers;
+  
+      /* implicitly defined upstream has no backup servers */
+***************
+*** 198,203 ****
+--- 237,256 ----
+  }
+  
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++ static ngx_int_t
++ ngx_http_upstream_cmp_implicit_servers(const void * one, const void * two)
++ {
++ 	ngx_http_upstream_rr_peer_t *first, *second;
++ 
++ 	first = (ngx_http_upstream_rr_peer_t*)one;
++ 	second = (ngx_http_upstream_rr_peer_t*)two;
++ 
++ 	return ngx_strcmp(first->name.data, second->name.data);
++ }
++ #endif
++ 
++ 
+  ngx_int_t
+  ngx_http_upstream_init_round_robin_peer(ngx_http_request_t *r,
+      ngx_http_upstream_srv_conf_t *us)
 *** src/http/ngx_http_upstream_round_robin.h	2011-02-08 10:39:27.019866002 +0500
 --- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.h	2011-02-08 10:28:55.739866001 +0500
 ***************
@@ -269,3 +312,23 @@
   } ngx_http_upstream_rr_peer_t;
   
   
+*** src/os/unix/ngx_process_cycle.c	2011-02-08 10:39:27.029866002 +0500
+--- ../nginx-0.8.53-dev/src/os/unix/ngx_process_cycle.c	2011-02-28 13:02:09.500333000 +0500
+***************
+*** 10,15 ****
+--- 10,24 ----
+  #include <ngx_channel.h>
+  
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++ /**
++  * Shared memory last write peer index.
++  * Reset when sighup is received by nginx
++  */
++ extern ngx_uint_t ustats_shm_index;
++ #endif
++ 
++ 
+  static void ngx_start_worker_processes(ngx_cycle_t *cycle, ngx_int_t n,
+      ngx_int_t type);
+  static void ngx_start_cache_manager_processes(ngx_cycle_t *cycle,
