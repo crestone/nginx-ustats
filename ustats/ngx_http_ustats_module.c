@@ -101,10 +101,9 @@ const char RESPONSE_BODY_END[] =
 
 
 /**
- * Shared memory used to store all stats
+ * Shared memory used to store the stats
  */
 ngx_shm_zone_t * stats_data = NULL;
-
 
 
 
@@ -354,18 +353,22 @@ static char *ngx_http_set_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     ngx_str_t * stats_data_shm_name = NULL;
 
-    stats_data_shm_name = ngx_palloc(cf->pool, sizeof(*stats_data_shm_name));
-    stats_data_shm_name->len = sizeof("stats_data");
-    stats_data_shm_name->data = (unsigned char*)"stats_data";
+	stats_data_shm_name = ngx_palloc(cf->pool, sizeof(*stats_data_shm_name));
+	stats_data_shm_name->len = sizeof("stats_data");
+	stats_data_shm_name->data = (unsigned char*)"stats_data";
 
-    /* TODO calculate size more precisely. Now memory is allocated with huge reserved space */
-    stats_data = ngx_shared_memory_add(cf, stats_data_shm_name, 28 * ngx_pagesize,
-    		&ngx_http_ustats_module);
+	/**
+	 * Assume page size to be 4096 bytes. Then 28 * ngx_pagesize == 114688 bytes.
+	 * Each backend has 8 parameters, 8 bytes each, so that 64 bytes in total for one backend.
+	 * 114688 / 64 == 1792, so there is a room for ~1700 backends. (??)
+	 */
+	stats_data = ngx_shared_memory_add(cf, stats_data_shm_name, 28 * ngx_pagesize,
+			&ngx_http_ustats_module);
 
-    if (!stats_data)
-    	return NGX_CONF_ERROR;
+	if (!stats_data)
+		return NGX_CONF_ERROR;
 
-    stats_data->init = ngx_http_ustats_init_stats_data_shm;
+	stats_data->init = ngx_http_ustats_init_stats_data_shm;
 
     return NGX_CONF_OK;
 }

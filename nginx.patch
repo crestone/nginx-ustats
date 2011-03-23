@@ -1,48 +1,50 @@
-*** src/http/ngx_http.h	2011-02-08 10:39:27.029866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http.h	2011-02-28 13:12:54.450333001 +0500
+*** src/core/ngx_core.h	2011-02-08 10:39:27.039866002 +0500
+--- ../nginx-0.8.53-dev/src/core/ngx_core.h	2011-03-16 17:10:04.325172002 +0500
 ***************
-*** 156,159 ****
---- 156,193 ----
-  extern ngx_http_output_body_filter_pt    ngx_http_top_body_filter;
+*** 90,93 ****
+--- 90,129 ----
+  void ngx_cpuinfo(void);
   
   
 + #if (NGX_HAVE_USTATS_MODULE)
 + /// Number of counters for each peer
 + #define USTATS_PEER_STATS_COUNT           8
-+  
++ 
 + /// Stat offset relative to the peer position within the shared memory
 + #define USTATS_REQ_STAT_INDEX             0
-+  
++ 
 + /// Holds HTTP 499 errors count
 + #define USTATS_HTTP499_STAT_INDEX         1
-+  
++ 
 + /// Holds HTTP 500 errors count
 + #define USTATS_HTTP500_STAT_INDEX         2
-+  
++ 
 + /// Holds HTTP 503 errors count
 + #define USTATS_HTTP503_STAT_INDEX         3
-+  
++ 
 + /// Holds TCP errors count
 + #define USTATS_TCP_ERR_STAT_INDEX         4
-+  
++ 
 + /// Holds read timeouts count
 + #define USTATS_READ_TIMEOUT_STAT_INDEX    5
-+  
++ 
 + /// Holds write timeouts count
 + #define USTATS_WRITE_TIMEOUT_STAT_INDEX   6
-+  
++ 
 + /// Holds last failed access time across all workers
 + #define USTATS_BLACKLISTED_STAT_INDEX     7
-+  
++ 
 + /// Shared memory for storing counters. Defined in ngx_http_ustats_module.c
 + extern ngx_shm_zone_t * stats_data;
++ /// Counter used to distribute shared memory among backends
++ extern ngx_uint_t ustats_shm_index;
 + 
 + #endif
 + 
 + 
-  #endif /* _NGX_HTTP_H_INCLUDED_ */
+  #endif /* _NGX_CORE_H_INCLUDED_ */
 *** src/http/ngx_http_upstream.c	2011-02-08 10:39:27.019866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c	2011-02-10 16:55:35.719812122 +0500
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream.c	2011-03-16 17:00:55.835172001 +0500
 ***************
 *** 1106,1111 ****
 --- 1106,1120 ----
@@ -313,7 +315,7 @@
   
   
 *** src/os/unix/ngx_process_cycle.c	2011-02-08 10:39:27.029866002 +0500
---- ../nginx-0.8.53-dev/src/os/unix/ngx_process_cycle.c	2011-02-28 13:02:09.500333000 +0500
+--- ../nginx-0.8.53-dev/src/os/unix/ngx_process_cycle.c	2011-03-16 20:16:36.085172002 +0500
 ***************
 *** 10,15 ****
 --- 10,24 ----
@@ -332,3 +334,30 @@
   static void ngx_start_worker_processes(ngx_cycle_t *cycle, ngx_int_t n,
       ngx_int_t type);
   static void ngx_start_cache_manager_processes(ngx_cycle_t *cycle,
+***************
+*** 226,231 ****
+--- 235,245 ----
+          if (ngx_reconfigure) {
+              ngx_reconfigure = 0;
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++             stats_data = NULL;
++             ustats_shm_index = 0;
++ #endif
++ 
+              if (ngx_new_binary) {
+                  ngx_start_worker_processes(cycle, ccf->worker_processes,
+                                             NGX_PROCESS_RESPAWN);
+***************
+*** 318,323 ****
+--- 332,341 ----
+  
+          if (ngx_reconfigure) {
+              ngx_reconfigure = 0;
++ #if (NGX_HAVE_USTATS_MODULE)
++             stats_data = NULL;
++             ustats_shm_index = 0;
++ #endif
+              ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0, "reconfiguring");
+  
+              cycle = ngx_init_cycle(cycle);
