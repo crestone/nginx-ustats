@@ -542,16 +542,17 @@ const char HTML[] =
 		"</html>\n";
 
 /**
- * Shared memory used to store the stats
+ * Shared memory used to store the statistics
  */
 ngx_shm_zone_t * stats_data = NULL;
+static size_t stats_data_size = 0;
 
 
 
 typedef struct
 {
     /**
-     * Resulting table width and height.
+     * HTML table width and height.
      * Less or equal 100 - percent value, greater than 100 - pixel value.
      * 70 by default.
      */
@@ -566,7 +567,10 @@ typedef struct
 static void * ngx_http_ustats_create_loc_conf(ngx_conf_t *cf);
 static char * ngx_http_ustats_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
-static char * ngx_http_set_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static char * ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+static char * ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+
+static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r);
 
 static ngx_buf_t * ngx_http_ustats_create_response_json(ngx_http_request_t * r);
 static ngx_buf_t * ngx_http_ustats_create_response_html(ngx_http_request_t * r);
@@ -577,16 +581,25 @@ static ngx_command_t  ngx_http_ustats_commands[] =
 {
     { 
         ngx_string("ustats"),
-        NGX_HTTP_LOC_CONF | NGX_CONF_FLAG,
-        ngx_http_set_ustats,
+        NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+        ngx_http_ustats,
         0,
         0,
         NULL 
     },
 
     {
+    	ngx_string("ustats_shm_size"),
+    	NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+    	ngx_http_shm_size,
+    	0,
+    	0,
+    	NULL
+    },
+
+    {
         ngx_string("ustats_html_table_width"),
-        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+        NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_num_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
         offsetof(ngx_http_ustats_loc_conf_t, html_table_width),
@@ -595,7 +608,7 @@ static ngx_command_t  ngx_http_ustats_commands[] =
 
     {
         ngx_string("ustats_html_table_height"),
-        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+        NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_num_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
         offsetof(ngx_http_ustats_loc_conf_t, html_table_height),
@@ -604,7 +617,7 @@ static ngx_command_t  ngx_http_ustats_commands[] =
 
     {
         ngx_string("ustats_refresh_interval"),
-        NGX_HTTP_MAIN_CONF | NGX_HTTP_SRV_CONF | NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
+        NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_conf_set_num_slot,
         NGX_HTTP_LOC_CONF_OFFSET,
         offsetof(ngx_http_ustats_loc_conf_t, refresh_interval),
@@ -709,6 +722,86 @@ static char* ngx_http_ustats_merge_loc_conf(ngx_conf_t *cf, void *parent, void *
 /*****************************************************************************/
 
 
+static ngx_int_t ngx_http_ustats_init_shm(ngx_shm_zone_t * shm_zone, void * data)
+{
+	if (data)
+	{
+		shm_zone->data = data;
+		return NGX_OK;
+	}
+
+	memset(shm_zone->shm.addr, 0, stats_data_size);
+	shm_zone->data = (void*)1; // new_data;
+
+	return NGX_OK;
+}
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+
+
+static char *ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_core_loc_conf_t  *clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
+
+    clcf->handler = ngx_http_ustats_handler;
+
+    return NGX_CONF_OK;
+}
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+
+
+static char *ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+	ngx_str_t * value = cf->args->elts;
+
+	ssize_t size = ngx_parse_size(&value[1]);
+	if (size == NGX_ERROR)
+	{
+		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: invalid shared memory size: %V", &value[1]);
+		return NGX_CONF_ERROR;
+	}
+
+	if (size < (int)ngx_pagesize)
+	{
+		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "The ustats_shm_size value must be at least %udB", ngx_pagesize);
+		size = ngx_pagesize;
+	}
+
+	if (stats_data_size && stats_data_size != (size_t)size)
+		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "Cannot change memory area without restart, ignoring changes");
+	else
+		stats_data_size = size;
+
+	ngx_conf_log_error(NGX_LOG_DEBUG, cf, 0, "Using %udKB of shared memory for ustats", stats_data_size);
+
+    ngx_str_t * shm_name = NULL;
+	shm_name = ngx_palloc(cf->pool, sizeof(*shm_name));
+	shm_name->len = sizeof("stats_data");
+	shm_name->data = (unsigned char*)"stats_data";
+
+	if (stats_data_size == 0)
+		stats_data_size = ngx_pagesize;
+
+	stats_data = ngx_shared_memory_add(cf, shm_name, stats_data_size, &ngx_http_ustats_module);
+
+	if (stats_data == NULL)
+		return NGX_CONF_ERROR;
+
+	stats_data->init = ngx_http_ustats_init_shm;
+
+	return NGX_CONF_OK;
+}
+
+
+/*****************************************************************************/
+/*****************************************************************************/
+
+
 static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r)
 {
     ngx_int_t rc;
@@ -780,62 +873,6 @@ static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r)
 /*****************************************************************************/
 
 
-static ngx_int_t ngx_http_ustats_init_stats_data_shm(ngx_shm_zone_t * shm_zone, void * data)
-{
-	if (data)
-	{
-		shm_zone->data = data;
-		return NGX_OK;
-	}
-
-	void * new_data = ngx_slab_alloc((ngx_slab_pool_t*)shm_zone->shm.addr, 49 * ngx_pagesize);
-	ngx_memset(new_data, 0, 99 * ngx_pagesize); // necessary?
-
-	if (!new_data)
-		return NGX_ERROR;
-
-	shm_zone->data = new_data;
-
-	return NGX_OK;
-}
-
-
-/*****************************************************************************/
-/*****************************************************************************/
-
-
-static char *ngx_http_set_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-    ngx_http_core_loc_conf_t  *clcf;
-
-    clcf = ngx_http_conf_get_module_loc_conf(cf, ngx_http_core_module);
-    clcf->handler = ngx_http_ustats_handler;
-
-    ngx_str_t * stats_data_shm_name = NULL;
-
-	stats_data_shm_name = ngx_palloc(cf->pool, sizeof(*stats_data_shm_name));
-	stats_data_shm_name->len = sizeof("stats_data");
-	stats_data_shm_name->data = (unsigned char*)"stats_data";
-
-	/**
-	 * Assume page size to be 4096 bytes. Then 28 * ngx_pagesize == 114688 bytes.
-	 * Each backend has 8 parameters, 8 bytes each, so that 64 bytes in total for one backend.
-	 * 114688 / 64 == 1792, so there is a room for ~1700 backends. (??)
-	 */
-	stats_data = ngx_shared_memory_add(cf, stats_data_shm_name, 100 * ngx_pagesize,
-			&ngx_http_ustats_module);
-
-	if (!stats_data)
-		return NGX_CONF_ERROR;
-
-	stats_data->init = ngx_http_ustats_init_stats_data_shm;
-
-    return NGX_CONF_OK;
-}
-
-/*****************************************************************************/
-/*****************************************************************************/
-
 
 static ngx_buf_t * ngx_http_ustats_create_response_json(ngx_http_request_t * r)
 {
@@ -904,9 +941,6 @@ static ngx_buf_t * ngx_http_ustats_create_response_json(ngx_http_request_t * r)
 
 	size += sizeof("}");
 
-	//size = 1048576; // Mb
-
-	// create resulting buffer
 	b = ngx_create_temp_buf(r->pool, size);
 
 	b->last = ngx_sprintf(b->last, "{\n");

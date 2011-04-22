@@ -1,5 +1,5 @@
 *** src/core/ngx_core.h	2011-02-08 10:39:27.039866002 +0500
---- ../nginx-0.8.53-dev/src/core/ngx_core.h	2011-03-30 16:24:51.583499000 +0600
+--- ../nginx-0.8.53-dev/src/core/ngx_core.h	2011-04-22 11:02:37.498228002 +0600
 ***************
 *** 90,93 ****
 --- 90,138 ----
@@ -41,7 +41,7 @@
 + /// Number of counters for each peer
 + #define USTATS_PEER_SEGMENT_LENGTH						(USTATS_FAIL_COUNT_STAT_OFFSET + sizeof(ngx_uint_t))
 + 
-+ #define USTATS_CALC_ADDRESS(peer_offset, param_offset)	(((u_char*)stats_data->data) + (peer_offset) + (param_offset))
++ #define USTATS_CALC_ADDRESS(peer_offset, param_offset)	(((u_char*)stats_data->shm.addr) + (peer_offset) + (param_offset))
 + 
 + /// Shared memory for storing counters. Defined in ngx_http_ustats_module.c
 + extern ngx_shm_zone_t * stats_data;
@@ -258,7 +258,7 @@
   
   
 *** src/http/ngx_http_upstream_round_robin.c	2011-02-08 10:39:27.019866002 +0500
---- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-03-30 16:27:01.083499000 +0600
+--- ../nginx-0.8.53-dev/src/http/ngx_http_upstream_round_robin.c	2011-04-22 11:01:20.978228001 +0600
 ***************
 *** 9,14 ****
 --- 9,24 ----
@@ -308,11 +308,12 @@
           }
 ***************
 *** 178,183 ****
---- 198,222 ----
+--- 198,223 ----
           peers->peer[i].fail_timeout = 10;
       }
   
 + #if (NGX_HAVE_USTATS_MODULE)
++ 
 + 	/**
 + 	 * Implicit peers order may change between two
 + 	 * configuration rescans. To maintain pointer
@@ -336,7 +337,7 @@
       /* implicitly defined upstream has no backup servers */
 ***************
 *** 198,203 ****
---- 237,256 ----
+--- 238,257 ----
   }
   
   
