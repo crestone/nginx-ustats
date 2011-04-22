@@ -568,7 +568,7 @@ static void * ngx_http_ustats_create_loc_conf(ngx_conf_t *cf);
 static char * ngx_http_ustats_merge_loc_conf(ngx_conf_t *cf, void *parent, void *child);
 
 static char * ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
-static char * ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
+//static char * ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf);
 
 static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r);
 
@@ -581,20 +581,11 @@ static ngx_command_t  ngx_http_ustats_commands[] =
 {
     { 
         ngx_string("ustats"),
-        NGX_HTTP_LOC_CONF | NGX_CONF_NOARGS,
+        NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
         ngx_http_ustats,
         0,
         0,
         NULL 
-    },
-
-    {
-    	ngx_string("ustats_shm_size"),
-    	NGX_HTTP_LOC_CONF | NGX_CONF_TAKE1,
-    	ngx_http_shm_size,
-    	0,
-    	0,
-    	NULL
     },
 
     {
@@ -747,37 +738,55 @@ static char *ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
     clcf->handler = ngx_http_ustats_handler;
 
-    return NGX_CONF_OK;
-}
+    if (cf->args->nelts == 1)
+    {
+    	ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: no shared memory size specified");
+    	return NGX_CONF_ERROR;
+    }
 
+    ssize_t size = 0;
 
-/*****************************************************************************/
-/*****************************************************************************/
+    ngx_str_t size_arg = ((ngx_str_t*)cf->args->elts)[1];
 
+    if (ngx_strncmp(size_arg.data, "memsize=", 8) == 0)
+    {
+    	ngx_str_t size_str;
 
-static char *ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
-{
-	ngx_str_t * value = cf->args->elts;
+    	size_str.len = size_arg.len - 8;
 
-	ssize_t size = ngx_parse_size(&value[1]);
-	if (size == NGX_ERROR)
+    	if (size_str.len == 0)
+    	{
+    		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: no shared memory size specified");
+    		return NGX_CONF_ERROR;
+    	}
+
+    	size_str.data = size_arg.data + 8;
+
+    	size = ngx_parse_size(&size_str);
+    	if (size == NGX_ERROR)
+		{
+			ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: unable to parse shared memory size");
+			return NGX_CONF_ERROR;
+		}
+    }
+    else
+    {
+    	ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: no shared memory size specified");
+    	return NGX_CONF_ERROR;
+    }
+
+    if (size < (int)ngx_pagesize)
 	{
-		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0, "ustats: invalid shared memory size: %V", &value[1]);
-		return NGX_CONF_ERROR;
-	}
-
-	if (size < (int)ngx_pagesize)
-	{
-		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "The ustats_shm_size value must be at least %udB", ngx_pagesize);
+		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "ustats: shared memory size must be at least %udB", ngx_pagesize);
 		size = ngx_pagesize;
 	}
 
 	if (stats_data_size && stats_data_size != (size_t)size)
-		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "Cannot change memory area without restart, ignoring changes");
+		ngx_conf_log_error(NGX_LOG_WARN, cf, 0, "ustats: cannot change shared memory area without restart, ignoring changes");
 	else
 		stats_data_size = size;
 
-	ngx_conf_log_error(NGX_LOG_DEBUG, cf, 0, "Using %udKB of shared memory for ustats", stats_data_size);
+	ngx_conf_log_error(NGX_LOG_DEBUG, cf, 0, "ustats: using %udB of shared memory", stats_data_size);
 
     ngx_str_t * shm_name = NULL;
 	shm_name = ngx_palloc(cf->pool, sizeof(*shm_name));
@@ -794,7 +803,7 @@ static char *ngx_http_shm_size(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 	stats_data->init = ngx_http_ustats_init_shm;
 
-	return NGX_CONF_OK;
+    return NGX_CONF_OK;
 }
 
 
