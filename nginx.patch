@@ -41,7 +41,7 @@
 + /// Number of counters for each peer
 + #define USTATS_PEER_SEGMENT_LENGTH						(USTATS_FAIL_COUNT_STAT_OFFSET + sizeof(ngx_uint_t))
 + 
-+ #define USTATS_CALC_ADDRESS(peer_offset, param_offset)	(((u_char*)stats_data->shm.addr) + (peer_offset) + (param_offset))
++ #define USTATS_CALC_ADDRESS(peer_offset, param_offset)	(((u_char*)stats_data->data) + (peer_offset) + (param_offset))
 + 
 + /// Shared memory for storing counters. Defined in ngx_http_ustats_module.c
 + extern ngx_shm_zone_t * stats_data;

@@ -1,6 +1,6 @@
 
 /**
- * Copyright (c) 2010-2011 Aleksey "0xc0dec" Fedotov
+ * Copyright (c) 2010-2012 Aleksey "0xc0dec" Fedotov
  * http://skbkontur.ru
  */
 
@@ -542,7 +542,7 @@ const char HTML[] =
 		"</html>\n";
 
 /**
- * Shared memory used to store the statistics
+ * Shared memory used to store statistics
  */
 ngx_shm_zone_t * stats_data = NULL;
 static size_t stats_data_size = 0;
@@ -721,8 +721,13 @@ static ngx_int_t ngx_http_ustats_init_shm(ngx_shm_zone_t * shm_zone, void * data
 		return NGX_OK;
 	}
 
-	memset(shm_zone->shm.addr, 0, stats_data_size);
-	shm_zone->data = (void*)1; // new_data;
+	ngx_slab_pool_t *shpool = (ngx_slab_pool_t*)shm_zone->shm.addr;
+
+	void *new_block = ngx_slab_alloc(shpool, stats_data_size);
+	memset(new_block, 0, stats_data_size);
+
+	shpool->data = new_block;
+	shm_zone->data = new_block;
 
 	return NGX_OK;
 }
@@ -786,8 +791,6 @@ static char *ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	else
 		stats_data_size = size;
 
-	ngx_conf_log_error(NGX_LOG_DEBUG, cf, 0, "ustats: using %udB of shared memory", stats_data_size);
-
     ngx_str_t * shm_name = NULL;
 	shm_name = ngx_palloc(cf->pool, sizeof(*shm_name));
 	shm_name->len = sizeof("stats_data");
@@ -796,7 +799,7 @@ static char *ngx_http_ustats(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 	if (stats_data_size == 0)
 		stats_data_size = ngx_pagesize;
 
-	stats_data = ngx_shared_memory_add(cf, shm_name, stats_data_size, &ngx_http_ustats_module);
+	stats_data = ngx_shared_memory_add(cf, shm_name, stats_data_size + 4 * ngx_pagesize, &ngx_http_ustats_module);
 
 	if (stats_data == NULL)
 		return NGX_CONF_ERROR;
@@ -840,12 +843,7 @@ static ngx_int_t ngx_http_ustats_handler(ngx_http_request_t *r)
     // Send HTML or simple JSON
     ngx_uint_t send_json = 0;
     if (r->args.data)
-    {
-    	if (ngx_strncmp(r->args.data, "?json", 5))
-    		send_json = 1;
-    	else
-    		send_json = 0;
-    }
+    	send_json = ngx_strncmp(r->args.data, "?json", 5) ? 1 : 0;
 
     if (send_json)
     {
