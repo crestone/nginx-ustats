@@ -1,5 +1,5 @@
-*** src/core/ngx_core.h	2012-02-13 22:29:04.000000000 +0600
---- ../nginx-1.2.1/src/core/ngx_core.h	2012-07-02 09:45:50.141703698 +0600
+*** nginx-1.2.2/src/core/ngx_core.h	2012-02-13 22:29:04.000000000 +0600
+--- nginx/src/core/ngx_core.h	2012-07-17 15:19:21.544757318 +0600
 ***************
 *** 97,100 ****
 --- 97,145 ----
@@ -52,8 +52,8 @@
 + 
 + 
   #endif /* _NGX_CORE_H_INCLUDED_ */
-*** src/http/ngx_http_upstream.c	2012-04-03 13:37:31.000000000 +0600
---- ../nginx-1.2.1/src/http/ngx_http_upstream.c	2012-07-02 09:45:50.141703698 +0600
+*** nginx-1.2.2/src/http/ngx_http_upstream.c	2012-07-02 21:43:50.000000000 +0600
+--- nginx/src/http/ngx_http_upstream.c	2012-07-18 17:38:54.981521307 +0600
 ***************
 *** 1134,1144 ****
 --- 1134,1146 ----
@@ -79,7 +79,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 +     if (stats_data)
 +     {
-+ 		ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++     	ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 		ngx_atomic_fetch_add((ngx_uint_t*)USTATS_CALC_ADDRESS(
 + 				rrp->peers->peer[rrp->current].shm_start_offset, USTATS_REQ_STAT_OFFSET), 1);
 +     }
@@ -97,7 +97,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 + 		if (stats_data)
 + 		{
-+ 			ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 			ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 			ngx_atomic_fetch_add((ngx_uint_t*)USTATS_CALC_ADDRESS(rrp->peers->peer[rrp->current].shm_start_offset, USTATS_WRITE_TIMEOUT_STAT_OFFSET), 1);
 + 		}
 + #endif
@@ -113,7 +113,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 + 		if (stats_data)
 + 		{
-+ 			ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++ 			ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 			ngx_atomic_fetch_add((ngx_uint_t*)USTATS_CALC_ADDRESS(
 + 				rrp->peers->peer[rrp->current].shm_start_offset, USTATS_READ_TIMEOUT_STAT_OFFSET), 1);
 + 		}
@@ -140,7 +140,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 +     if (stats_data)
 +     {
-+ 		ngx_http_upstream_rr_peer_data_t  *rrp = u->peer.data;
++     	ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 		switch (status)
 + 		{
 + 			case 500:
@@ -173,7 +173,7 @@
 + 			if (stats_data)
 + 			{
 + 				ngx_http_request_t *r = c->data;
-+ 				ngx_http_upstream_rr_peer_data_t *rrp = r->upstream->peer.data;
++ 				ngx_http_upstream_rr_peer_data_t *rrp = r->upstream->peer.rr_data ? r->upstream->peer.rr_data : r->upstream->peer.data;
 + 				ngx_atomic_fetch_add((ngx_uint_t*)USTATS_CALC_ADDRESS(rrp->peers->peer[rrp->current].shm_start_offset, USTATS_TCP_ERR_STAT_OFFSET), 1);
 + 			}
 + #endif
@@ -190,7 +190,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 +     if (stats_data)
 +     {
-+ 		ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
++     	ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 		if (rrp->peers->peer[rrp->current].fails + 1 >= rrp->peers->peer[rrp->current].max_fails
 + 			|| rrp->peers->peer[rrp->current].max_fails == 1)
 + 		{
@@ -214,7 +214,7 @@
 + #if (NGX_HAVE_USTATS_MODULE)
 +     if (stats_data)
 +     {
-+ 		ngx_http_upstream_rr_peer_data_t *rrp = u->peer.data;
++     	ngx_http_upstream_rr_peer_data_t *rrp = u->peer.rr_data ? u->peer.rr_data : u->peer.data;
 + 		if (rc == NGX_HTTP_CLIENT_CLOSED_REQUEST)
 + 		{
 + 			//ngx_atomic_fetch_add((ngx_atomic_uint_t*)stats_data->data +
@@ -228,8 +228,8 @@
   }
   
 ***************
-*** 4214,4219 ****
---- 4301,4312 ----
+*** 4228,4233 ****
+--- 4315,4326 ----
       u.url = value[1];
       u.default_port = 80;
   
@@ -242,8 +242,8 @@
       if (ngx_parse_url(cf->pool, &u) != NGX_OK) {
           if (u.err) {
               ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-*** src/http/ngx_http_upstream.h	2012-02-13 17:01:58.000000000 +0600
---- ../nginx-1.2.1/src/http/ngx_http_upstream.h	2012-07-02 09:45:50.141703698 +0600
+*** nginx-1.2.2/src/http/ngx_http_upstream.h	2012-02-13 17:01:58.000000000 +0600
+--- nginx/src/http/ngx_http_upstream.h	2012-07-17 15:19:21.544757318 +0600
 ***************
 *** 93,98 ****
 --- 93,102 ----
@@ -257,8 +257,8 @@
   } ngx_http_upstream_server_t;
   
   
-*** src/http/ngx_http_upstream_round_robin.c	2012-06-04 17:21:58.000000000 +0600
---- ../nginx-1.2.1/src/http/ngx_http_upstream_round_robin.c	2012-07-02 09:47:00.752815996 +0600
+*** nginx-1.2.2/src/http/ngx_http_upstream_round_robin.c	2012-07-02 22:41:13.000000000 +0600
+--- nginx/src/http/ngx_http_upstream_round_robin.c	2012-07-18 16:17:54.029309210 +0600
 ***************
 *** 10,15 ****
 --- 10,25 ----
@@ -279,8 +279,8 @@
       const void *two);
   static ngx_http_upstream_rr_peer_t *ngx_http_upstream_get_peer(
 ***************
-*** 83,88 ****
---- 93,103 ----
+*** 87,92 ****
+--- 97,107 ----
                   peers->peer[n].weight = server[i].weight;
                   peers->peer[n].effective_weight = server[i].weight;
                   peers->peer[n].current_weight = 0;
@@ -293,8 +293,8 @@
               }
           }
 ***************
-*** 137,142 ****
---- 152,162 ----
+*** 145,150 ****
+--- 160,170 ----
                   backup->peer[n].max_fails = server[i].max_fails;
                   backup->peer[n].fail_timeout = server[i].fail_timeout;
                   backup->peer[n].down = server[i].down;
@@ -307,8 +307,8 @@
               }
           }
 ***************
-*** 198,203 ****
---- 218,243 ----
+*** 208,213 ****
+--- 228,253 ----
           peers->peer[i].fail_timeout = 10;
       }
   
@@ -336,8 +336,8 @@
   
       /* implicitly defined upstream has no backup servers */
 ***************
-*** 218,223 ****
---- 258,277 ----
+*** 228,233 ****
+--- 268,287 ----
   }
   
   
@@ -358,8 +358,8 @@
   ngx_int_t
   ngx_http_upstream_init_round_robin_peer(ngx_http_request_t *r,
       ngx_http_upstream_srv_conf_t *us)
-*** src/http/ngx_http_upstream_round_robin.h	2012-06-04 17:21:58.000000000 +0600
---- ../nginx-1.2.1/src/http/ngx_http_upstream_round_robin.h	2012-07-02 09:45:50.141703698 +0600
+*** nginx-1.2.2/src/http/ngx_http_upstream_round_robin.h	2012-07-02 22:41:13.000000000 +0600
+--- nginx/src/http/ngx_http_upstream_round_robin.h	2012-07-17 15:19:21.544757318 +0600
 ***************
 *** 35,40 ****
 --- 35,46 ----
@@ -375,8 +375,8 @@
   } ngx_http_upstream_rr_peer_t;
   
   
-*** src/os/unix/ngx_process_cycle.c	2012-03-21 19:58:51.000000000 +0600
---- ../nginx-1.2.1/src/os/unix/ngx_process_cycle.c	2012-07-02 09:45:50.141703698 +0600
+*** nginx-1.2.2/src/os/unix/ngx_process_cycle.c	2012-07-02 22:23:14.000000000 +0600
+--- nginx/src/os/unix/ngx_process_cycle.c	2012-07-17 15:19:21.544757318 +0600
 ***************
 *** 11,16 ****
 --- 11,25 ----
@@ -422,3 +422,33 @@
               ngx_log_error(NGX_LOG_NOTICE, cycle->log, 0, "reconfiguring");
   
               cycle = ngx_init_cycle(cycle);
+*** nginx-1.2.2/src/event/ngx_event_connect.h	2012-01-18 21:07:43.000000000 +0600
+--- nginx/src/event/ngx_event_connect.h	2012-07-18 16:14:48.154752803 +0600
+***************
+*** 66,71 ****
+--- 66,75 ----
+  
+                                       /* ngx_connection_log_error_e */
+      unsigned                         log_error:2;
++ 
++ #if (NGX_HAVE_USTATS_MODULE)
++     void							*rr_data;
++ #endif
+  };
+  
+  
+*** nginx-1.2.2/src/http/modules/ngx_http_upstream_keepalive_module.c	2012-07-02 22:41:13.000000000 +0600
+--- nginx/src/http/modules/ngx_http_upstream_keepalive_module.c	2012-07-18 16:18:15.731882509 +0600
+***************
+*** 196,201 ****
+--- 196,205 ----
+      r->upstream->peer.get = ngx_http_upstream_get_keepalive_peer;
+      r->upstream->peer.free = ngx_http_upstream_free_keepalive_peer;
+  
++ #if (NGX_HAVE_USTATS_MODULE)
++     r->upstream->peer.rr_data = kp->data;
++ #endif
++ 
+  #if (NGX_HTTP_SSL)
+      kp->original_set_session = r->upstream->peer.set_session;
+      kp->original_save_session = r->upstream->peer.save_session;
